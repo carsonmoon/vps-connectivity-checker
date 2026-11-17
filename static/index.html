@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPS 连通性检测台</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --line: #21262d; --fg: #e6edf3; --muted: #8b949e;
+    --good: #3fb950; --info: #58a6ff; --warn: #d29922; --bad: #f85149; --accent: #4cc2ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: rgba(13,17,23,.92); backdrop-filter: blur(6px); z-index: 5;
+  }
+  h1 { font-size: 17px; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .egress { font-size: 12px; color: var(--muted); background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; max-width: 100%; overflow-wrap: anywhere; }
+  .egress b { color: var(--fg); font-weight: 600; }
+  button {
+    background: var(--card); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: wait; }
+  main { max-width: 900px; margin: 0 auto; padding: 22px 20px 60px; }
+
+  /* 快速检测输入面板 */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .panel label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 5px; }
+  .panel input { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px 12px; font-size: 15px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .panel input:focus { outline: none; border-color: var(--accent); }
+  .row-host { margin-bottom: 14px; }
+  .row-ports { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .go-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .go-row button { font-size: 15px; padding: 10px 26px; border-radius: 10px; }
+  .go-hint { color: var(--muted); font-size: 12px; }
+  details.adv { margin-bottom: 2px; }
+  details.adv summary { cursor: pointer; color: var(--muted); font-size: 12px; user-select: none; }
+  details.adv input { margin-top: 8px; font-size: 13px; }
+  details.adv .hint { margin-top: 8px; }
+
+  /* 结果区 */
+  #result { margin-top: 18px; }
+  .empty { text-align: center; color: var(--muted); padding: 70px 0; }
+  .empty .big { font-size: 34px; margin-bottom: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; padding: 14px 18px; }
+  .card-head .name { font-size: 17px; font-weight: 700; }
+  .card-head .host { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--muted); font-size: 13px; }
+  .result { border-top: 1px solid var(--line); padding: 14px 18px 18px; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .section { margin-top: 14px; }
+  .section > .sec-title { font-size: 12px; color: var(--accent); font-weight: 700;
+    letter-spacing: .05em; margin-bottom: 6px; }
+  .kv { font-size: 13px; color: var(--muted); margin: 2px 0; overflow-wrap: anywhere; }
+  .kv code { font-family: ui-monospace, Menlo, monospace; color: var(--fg); background: #21262d;
+    padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px;
+    padding: 4px 10px 4px 0; white-space: nowrap; }
+  td { padding: 5px 10px 5px 0; border-top: 1px dashed var(--line); white-space: nowrap; }
+  .chip { display: inline-block; border-radius: 6px; padding: 1px 8px; font-size: 12px;
+    border: 1px solid transparent; }
+  .c-good { color: var(--good); border-color: var(--good); background: rgba(63,185,80,.08); }
+  .c-info { color: var(--info); border-color: var(--info); background: rgba(88,166,255,.08); }
+  .c-warn { color: var(--warn); border-color: var(--warn); background: rgba(210,153,34,.08); }
+  .c-bad  { color: var(--bad);  border-color: var(--bad);  background: rgba(248,81,73,.08); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .verdict { background: #10161d; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px; margin-top: 14px; }
+  .verdict .sec-title { color: #e3b341; }
+  .verdict ul { margin: 4px 0 0; padding-left: 0; list-style: none; }
+  .verdict li { padding: 3px 0 3px 18px; position: relative; font-size: 13px; }
+  .verdict li::before { content: "●"; position: absolute; left: 2px; font-size: 10px; top: 7px; }
+  .lv-good::before { color: var(--good); } .lv-info::before { color: var(--info); }
+  .lv-warn::before { color: var(--warn); } .lv-bad::before { color: var(--bad); }
+  .lv-unknown::before { color: var(--muted); } .lv-unknown { color: var(--muted); }
+  .hidden { display: none !important; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📡 VPS 连通性检测台</h1>
+    <div class="sub">从你家宽带视角 · IPv4 / IPv6 × TCP / UDP 全量检测</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="egress" id="egress">出口网络：加载中…</div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="row-host">
+      <label>目标地址（域名或 IP）</label>
+      <input id="q-host" placeholder="例如 example.com / 1.2.3.4 / 2001:db8::1" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="row-ports">
+      <div>
+        <label>TCP 端口（逗号分隔，留空测 22, 80, 443）</label>
+        <input id="q-tcp" placeholder="22, 80, 443" spellcheck="false" autocomplete="off">
+      </div>
+      <div>
+        <label>UDP 端口（逗号分隔，留空测 443）</label>
+        <input id="q-udp" placeholder="443（hy2 常用）" spellcheck="false" autocomplete="off">
+      </div>
+    </div>
+    <details class="adv">
+      <summary>高级：UDP 自定义载荷（让会回包的服务被识别为「有响应」）</summary>
+      <input id="q-payload" placeholder="53:000101000001000000000000076578616d706c6503636f6d0000010001（端口:十六进制，逗号分隔）" spellcheck="false" autocomplete="off">
+      <div class="hint">示例是一条查询 example.com 的 DNS 报文（发给 53 端口）。QUIC/hy2 端口无需配置——它按协议规范对无效包静默丢弃。</div>
+    </details>
+    <div class="go-row">
+      <button id="q-go" class="primary">▶ 开始检测</button>
+      <span class="go-hint">自动执行：Ping · TCP 端口 · UDP 三态 + 对照端口 · DNS 解析 · 出口网络</span>
+    </div>
+  </div>
+
+  <div id="result">
+    <div class="empty" id="empty-hint">
+      <div class="big">🔎</div>
+      在上方填入 VPS 的地址，点「▶ 开始检测」<br>IPv4 / IPv6 两族的 Ping、TCP、UDP、DNS 结果会全部显示在这里
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+let lastRound = null;
+
+// ---- 状态语义（后端状态 → 界面文案 / 颜色等级）----
+const TCP_S = {
+  open:       ["good", "✅ 可达"],
+  refused:    ["info", "🔵 拒绝 · 路径通 · 无监听"],
+  timeout:    ["warn", "⚠️ 超时 · 无回包"],
+  unreachable:["bad",  "🔴 不可达"],
+  no_route:   ["bad",  "🚫 无路由"],
+  error:      ["bad",  "❌ 出错"],
+};
+const UDP_S = {
+  response:   ["good", "✅ 有响应"],
+  closed:     ["info", "🔵 端口关闭 · UDP 路径通"],
+  no_response:["warn", "⚠️ 无响应 · 无法判定"],
+  unreachable:["bad",  "🔴 不可达"],
+  no_route:   ["bad",  "🚫 无路由"],
+  error:      ["bad",  "❌ 出错"],
+};
+const PING_S = {
+  ok:       ["good", "✅ 通"],
+  dead:     ["warn", "⚠️ 100% 丢包"],
+  timeout:  ["warn", "⚠️ 超时"],
+  no_route: ["bad",  "🚫 无路由"],
+  error:    ["bad",  "❌ 出错"],
+};
+const FAM = { v4: "IPv4", v6: "IPv6" };
+const DEFAULT_TCP = [22, 80, 443];
+const DEFAULT_UDP = [443];
+
+function chip(map, r) {
+  const [cls, label] = map[r.status] || ["bad", r.status];
+  let text = label;
+  if ((r.status === "unreachable" || r.status === "no_route") && r.family === "v6")
+    text += "（观测点可能无 IPv6 出口）";
+  if (r.status === "error" && r.error) text += "：" + esc(r.error);
+  return `<span class="chip c-${cls}"${r.reply_preview ? ` title="回包: ${esc(r.reply_preview)}"` : ""}>${text}</span>`;
+}
+
+// ---- API ----
+async function api(path, opts) {
+  const resp = await fetch(path, opts);
+  const body = await resp.json().catch(() => ({ ok: false, error: "响应不是 JSON" }));
+  if (!resp.ok || body.ok === false) throw new Error(body.error || resp.status);
+  return body.data;
+}
+
+function renderEgress() {
+  const el = $("egress");
+  if (!lastRound || !lastRound.egress) { el.textContent = "出口网络：未知"; return; }
+  const eg = lastRound.egress;
+  const v6 = eg.v6_route
+    ? (eg.v6 ? `IPv6 <b>${esc(eg.v6)}</b>` : "IPv6 有路由但查询失败")
+    : `IPv6 <b>无出口</b> ⚠️`;
+  el.innerHTML = `出口 IPv4 <b>${eg.v4 ? esc(eg.v4) : "未知"}</b> · ${v6}`;
+}
+
+// ---- 结果渲染 ----
+function renderResult(r) {
+  let h = "";
+  const when = r.checked_at || (lastRound && lastRound.started) || "";
+  const dur = (r.duration_ms ?? (lastRound && lastRound.duration_ms) ?? 0) / 1000;
+  h += `<div class="meta">检测时间 ${esc(when.replace("T", " "))} · 耗时 ${dur.toFixed(1)}s</div>`;
+
+  // DNS
+  const d = r.dns || {};
+  const dnsParts = [];
+  if (d.error) dnsParts.push(`<span class="chip c-bad">解析失败</span> ${esc(d.error)}`);
+  if (d.v4 && d.v4.length) dnsParts.push(`A 记录: <code>${d.v4.map(esc).join("</code> <code>")}</code>`);
+  if (d.v6 && d.v6.length) dnsParts.push(`AAAA 记录: <code>${d.v6.map(esc).join("</code> <code>")}</code>`);
+  if (!dnsParts.length) dnsParts.push("（字面 IP，无需解析）");
+  h += `<div class="section"><div class="sec-title">DNS 解析</div><div class="kv">${dnsParts.join("<br>")}</div>`;
+  const pi = r.probe_ip || {};
+  const probed = Object.keys(pi).map(f => `${FAM[f]} 探测 IP: <code>${esc(pi[f])}</code>`).join(" · ");
+  if (probed) h += `<div class="kv">${probed}</div>`;
+  h += `</div>`;
+
+  // Ping
+  const fams = r.families || [];
+  if (fams.length) {
+    h += `<div class="section"><div class="sec-title">PING（ICMP）</div>`;
+    for (const fam of fams) {
+      const p = (r.ping || {})[fam];
+      if (!p) continue;
+      const [cls, label] = PING_S[p.status] || ["bad", p.status];
+      let extra = "";
+      if (p.status === "ok") extra = ` · ${p.avg_ms != null ? "平均 " + p.avg_ms + "ms" : "平均 —"} · 丢包 ${p.loss_pct}% (${p.recv}/${p.sent})`;
+      if (p.status === "error" && p.error) extra = " · " + esc(p.error);
+      h += `<div class="kv"><b>${FAM[fam]}</b> <span class="chip c-${cls}">${label}</span>${extra}</div>`;
+    }
+    h += `</div>`;
+  }
+
+  // TCP
+  if (r.tcp && r.tcp.length) {
+    h += `<div class="section"><div class="sec-title">TCP 端口可达性</div><table>
+      <tr><th>协议</th><th>端口</th><th>结果</th><th>连接耗时</th></tr>`;
+    for (const row of r.tcp)
+      h += `<tr><td>${FAM[row.family]}</td><td>${row.port}</td><td>${chip(TCP_S, row)}</td>
+            <td>${row.ms != null ? row.ms + " ms" : "—"}</td></tr>`;
+    h += `</table><div class="hint">「拒绝」说明路径是通的（收到 RST），只是端口没服务；「超时」可能是端口被防火墙丢弃或路径被墙。</div></div>`;
+  }
+
+  // UDP
+  if (r.udp && r.udp.length) {
+    h += `<div class="section"><div class="sec-title">UDP 端口可达性</div><table>
+      <tr><th>协议</th><th>端口</th><th>结果</th><th>往返耗时</th><th>载荷</th></tr>`;
+    for (const row of r.udp)
+      h += `<tr><td>${FAM[row.family]}</td><td>${row.port}</td><td>${chip(UDP_S, row)}</td>
+            <td>${row.ms != null ? row.ms + " ms" : "—"}</td>
+            <td>${row.payload === "custom" ? "自定义" : "默认"}</td></tr>`;
+    h += `</table><div class="hint">UDP 无响应 ≠ 不通：QUIC/hy2 服务器按协议规范对无效包静默丢弃。结合下方「对照端口」与综合解读判断。</div></div>`;
+  }
+
+  // 对照端口
+  if (r.control && r.control.length) {
+    h += `<div class="section"><div class="sec-title">对照端口（VPS 上必然无服务的高位端口）</div><table>
+      <tr><th>协议</th><th>端口</th><th>结果</th></tr>`;
+    for (const row of r.control)
+      h += `<tr><td>${FAM[row.family]}</td><td>${row.port}</td><td>${chip(UDP_S, row)}</td></tr>`;
+    h += `</table><div class="hint">对照端口返回「端口关闭」⇒ UDP 路径完整；返回「无响应」⇒ 无法用三态区分 UDP 问题。</div></div>`;
+  }
+
+  // 综合解读
+  if (r.verdicts && r.verdicts.length) {
+    h += `<div class="verdict"><div class="sec-title">综合解读</div><ul>${
+      r.verdicts.map(([lv, text]) => `<li class="lv-${lv}">${esc(text)}</li>`).join("")
+    }</ul></div>`;
+  }
+  return h;
+}
+
+function showResult() {
+  const res = lastRound && lastRound.targets && lastRound.targets[0];
+  $("result").innerHTML = res
+    ? `<div class="card">
+        <div class="card-head">
+          <span class="name">${esc(res.name)}</span>
+          <span class="host">${esc(res.host)}</span>
+        </div>
+        <div class="result">${renderResult(res)}</div>
+      </div>`
+    : "";
+}
+
+// ---- 动作 ----
+function parsePorts(s) {
+  const out = [];
+  for (const part of s.split(/[,，\s、]+/)) {
+    if (!part) continue;
+    const n = Number(part);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) throw `端口不合法：${part}`;
+    out.push(n);
+  }
+  return out;
+}
+
+function parsePayloads(s) {
+  const out = {};
+  for (const part of s.split(/[,，]/)) {
+    const t = part.trim();
+    if (!t) continue;
+    const i = t.indexOf(":");
+    if (i < 0) throw `载荷格式应为 端口:十六进制：${t}`;
+    const port = Number(t.slice(0, i));
+    const hex = t.slice(i + 1).replace(/\s+/g, "");
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw `载荷端口不合法：${t}`;
+    if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2) throw `载荷不是合法十六进制：${t}`;
+    out[String(port)] = hex.toLowerCase();
+  }
+  return out;
+}
+
+async function runCheck() {
+  let body;
+  try {
+    const host = $("q-host").value.trim().replace(/^\[|\]$/g, "");
+    if (!host) { alert("请先填写目标地址"); $("q-host").focus(); return; }
+    body = {
+      host,
+      tcp_ports: parsePorts($("q-tcp").value).length ? parsePorts($("q-tcp").value) : DEFAULT_TCP,
+      udp_ports: parsePorts($("q-udp").value).length ? parsePorts($("q-udp").value) : DEFAULT_UDP,
+      udp_payloads: parsePayloads($("q-payload").value),
+    };
+  } catch (e) { alert(typeof e === "string" ? e : e.message); return; }
+
+  const btn = $("q-go");
+  btn.disabled = true;
+  $("result").innerHTML = `<div class="empty"><span class="spin" style="font-size:26px;display:inline-block">◌</span><br>检测中…（约 5-15 秒，正在并发探测所有项目）</div>`;
+  try {
+    lastRound = await api("/api/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    renderEgress();
+    showResult();
+  } catch (e) {
+    $("result").innerHTML = `<div class="empty">❌ 检测失败：${esc(e.message)}</div>`;
+  }
+  btn.disabled = false;
+}
+
+// ---- 事件 ----
+$("q-go").onclick = runCheck;
+$("q-host").addEventListener("keydown", e => { if (e.key === "Enter") runCheck(); });
+$("q-tcp").addEventListener("keydown", e => { if (e.key === "Enter") runCheck(); });
+$("q-udp").addEventListener("keydown", e => { if (e.key === "Enter") runCheck(); });
+
+// 页面加载：先取出口网络信息（后台进行，不阻塞输入）
+api("/api/egress").then(eg => {
+  lastRound = { egress: eg };
+  renderEgress();
+}).catch(() => { $("egress").textContent = "出口网络：获取失败"; });
+</script>
+</body>
+</html>

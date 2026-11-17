@@ -1,0 +1,10 @@
+# 运行时数据：包含用户自己的 VPS 目标配置，绝不入库
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# 系统与其他
+.DS_Store
+*.log

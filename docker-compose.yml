@@ -1,0 +1,13 @@
+services:
+  vps-check:
+    build: .
+    image: vps-check:local
+    container_name: vps-check
+    # host 网络：容器直接用 NAS 的网络栈，天然继承家宽的 IPv4/IPv6 出口
+    # （bridge 模式默认没有 IPv6，会导致 IPv6 检测全部假阴性）
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - PORT=52000
