@@ -9,18 +9,36 @@
 
 ## 快速开始
 
-### 方式一：NAS / Linux 服务器（Docker，推荐）
+### 方式一：NAS 直接拉镜像（推荐，NAS 上零构建）
+
+镜像由 GitHub Actions 自动构建并发布，双架构（`linux/amd64` + `linux/arm64`）：
 
 ```bash
-cd 本项目目录
-docker compose up -d --build
+docker run -d --name vps-check --network host --restart unless-stopped \
+  -v /vol1/1000/docker/vps-check/data:/data \
+  ghcr.io/carsonmoon/vps-connectivity-checker:latest
+```
+
+或用 compose 管理（源码在 NAS 上时，`pull` 拉现成镜像、不触发构建）：
+
+```bash
+git clone https://github.com/carsonmoon/vps-connectivity-checker.git && cd vps-connectivity-checker
+docker compose pull && docker compose up -d
 ```
 
 然后家里任何设备浏览器打开：`http://<NAS的IP>:52000`
 
 > 使用 `network_mode: host`：容器直接继承 NAS 的网络栈（含 IPv6 出口）。若 NAS 或路由器没有 IPv6，页面会如实显示「IPv6 无出口」——这本身就是你宽带环境的答案。
 
-### 方式二：Mac / 任意有 Python 3 的机器（调试直跑）
+### 方式二：源码本地构建（无外网 / 私有化场景）
+
+把源码放到 NAS 后，在项目目录执行：
+
+```bash
+docker compose build && docker compose up -d
+```
+
+### 方式三：Mac / 任意有 Python 3 的机器（调试直跑）
 
 ```bash
 python3 server.py
